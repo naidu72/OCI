@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sample Shop</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #1f2328; }
+    h1 { margin-bottom: .25rem; }
+    .muted { color: #656d76; font-size: .9rem; }
+    table { width: 100%; border-collapse: collapse; margin: .5rem 0 1.5rem; }
+    th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid #d0d7de; }
+    button { cursor: pointer; padding: .25rem .6rem; }
+    pre { background: #f6f8fa; padding: .75rem; overflow-x: auto; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <h1>Sample Shop</h1>
+  <p class="muted">nginx routes <code>/api/catalog/*</code> and <code>/api/orders/*</code> to separate services.
+    Refresh to watch the load balancer alternate nodes.</p>
+
+  <h2>Products <span class="muted" id="catalog-node"></span></h2>
+  <table><thead><tr><th>ID</th><th>Name</th><th>Price</th><th></th></tr></thead><tbody id="products"></tbody></table>
+
+  <h2>Recent orders <span class="muted" id="orders-node"></span></h2>
+  <table><thead><tr><th>ID</th><th>Product</th><th>Qty</th><th>Total</th><th>Created</th></tr></thead><tbody id="orders"></tbody></table>
+
+  <h2>Health</h2>
+  <pre id="health">loading…</pre>
+
+  <script>
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const get = url => fetch(url).then(r => r.json());
+
+    async function load() {
+      const [catalog, orders, h1, h2] = await Promise.all([
+        get("/api/catalog/products"), get("/api/orders/"),
+        get("/api/catalog/health"), get("/api/orders/health"),
+      ]);
+      document.getElementById("catalog-node").textContent = `served by ${catalog.node}`;
+      document.getElementById("orders-node").textContent = `served by ${orders.node}`;
+      document.getElementById("products").innerHTML = (catalog.products || []).map(p =>
+        `<tr><td>${p.id}</td><td>${esc(p.name)}</td><td>${p.price}</td>
+         <td><button onclick="order(${p.id})">Order</button></td></tr>`).join("");
+      document.getElementById("orders").innerHTML = (orders.orders || []).map(o =>
+        `<tr><td>${o.id}</td><td>${esc(o.product)}</td><td>${o.quantity}</td><td>${o.total}</td>
+         <td>${new Date(o.created_at).toLocaleString()}</td></tr>`).join("");
+      document.getElementById("health").textContent = JSON.stringify([h1, h2], null, 2);
+    }
+
+    async function order(productId) {
+      await fetch("/api/orders/", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ product_id: productId, quantity: 1 }),
+      });
+      load();
+    }
+
+    load().catch(e => document.getElementById("health").textContent = e);
+  </script>
+</body>
+</html>

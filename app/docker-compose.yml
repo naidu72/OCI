@@ -1,0 +1,62 @@
+name: sample-app
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    environment:
+      NODE_NAME: ${NODE_NAME}
+    depends_on:
+      - catalog
+      - orders
+    restart: unless-stopped
+
+  catalog:
+    build: ./services
+    image: sample-app/services:latest
+    container_name: catalog
+    command: ["gunicorn", "-b", "0.0.0.0:8000", "-w", "2", "catalog:app"]
+    environment: &app_env
+      NODE_NAME: ${NODE_NAME}
+      DB_HOSTS: ${DB_HOSTS}
+      DB_NAME: appdb
+      DB_USER: app
+      DB_PASSWORD: ${APP_DB_PASSWORD}
+    restart: unless-stopped
+
+  orders:
+    build: ./services
+    image: sample-app/services:latest
+    container_name: orders
+    command: ["gunicorn", "-b", "0.0.0.0:8000", "-w", "2", "orders:app"]
+    environment: *app_env
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    container_name: db
+    entrypoint: ["/opt/db/db-entrypoint.sh"]
+    ports:
+      - "5432:5432"
+    environment:
+      NODE_NAME: ${NODE_NAME}
+      NODE_ROLE: ${NODE_ROLE}
+      PEER_IP: ${PEER_IP}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD}
+      VCN_CIDR: ${VCN_CIDR}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/opt/db:ro
+      - ./db/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh:ro
+    shm_size: 256mb
+    restart: unless-stopped
+
+volumes:
+  pgdata:
